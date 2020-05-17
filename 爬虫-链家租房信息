@@ -1,0 +1,86 @@
+import pymysql
+import time
+import requests
+from bs4 import BeautifulSoup
+
+# 获取url下的页面内容，返回soup对象
+def get_page(url):
+    responce = requests.get(url)
+    soup = BeautifulSoup(responce.text, 'html.parser')
+    return soup
+
+# 封装成函数，作用是获取列表页下面的所有租房页面的链接，返回一个链接列表
+def get_links(link_url):
+    soup = get_page(link_url)
+    # url_host = 'https://gz.lianjia.com/'
+    links_div = soup.find_all('div', class_="content__list--item--main")
+    links = [div.a.get('href') for div in links_div]
+    print(links)
+    return links
+
+def get_house_info(house_url):
+
+    # house_url = 'https://gz.lianjia.com/zufang/GZ2298305088701612032.html?nav=0&unique_id=dd85aae4-ba2d-46af-a027-1b5a920a1b70zufang1589621537856'
+    soup = get_page('https://gz.lianjia.com' + house_url)
+    price = soup.find('div', class_='content__aside--title').text[1:8]
+    print(price)
+    house_info = soup.find_all('li',class_='fl oneline')
+    area = house_info[1].text[3:]
+    # print(area)
+    chaoxiang = house_info[2].text[3:]
+    weihu = house_info[4].text[3:]
+    ruzhu = house_info[5].text[3:]
+    louceng = house_info[7].text[3:]
+    dianti = house_info[8].text[3:]
+    print(chaoxiang, weihu, ruzhu, louceng,dianti)
+
+    lease = soup.find_all('ul', class_='content__aside__list')
+    lease_info = lease[0].text
+    print(lease_info)
+
+    info = {
+        '价格':price,
+        '面积':area,
+        '朝向':chaoxiang,
+        '维护':weihu,
+        '入住':ruzhu,
+        '楼层':louceng,
+        '电梯':dianti,
+        '租赁信息':lease_info
+    }
+    return info
+# print(info)
+DATABASE = {                   #一个数据库，写成字典；如果是多个数据库连接，写成列表[{配置信息},{}]
+    'host':'localhost',    #localhost相当于127.0.0.1，如果是远程数据库，此处为远程服务器的ip地址
+    'database':'lj',
+    'user':'root',
+    'password':'1234'
+}
+def get_db(setting):
+    return pymysql.connect(**setting)
+
+def insert(db, house):
+    values = "'{}',"*7 +"'{}'"
+    sql_values = values.format(house['价格'],house['面积'],house['朝向'],house['维护'],
+                               house['入住'],house['楼层'],house['电梯'],house['租赁信息'])
+    sql = """
+    insert into house(price,area,chaoxiang,weihu,ruzhu,louceng,dianti,lease_info)
+     values({});
+    """.format(sql_values)
+    # print(sql)
+    cursor = db.cursor()
+    cursor.execute(sql)
+    db.commit()
+
+house = get_house_info('https://gz.lianjia.com/zufang/GZ2298305088701612032.html?'
+                       'nav=0&unique_id=dd85aae4-ba2d-46af-a027-1b5a920a1b70zufang1589621508886')
+print(house)
+
+db = get_db(DATABASE)
+links = get_links('https://gz.lianjia.com/zufang/')
+for link in links:
+    time.sleep(2)
+    print("获取一个房子信息成功")
+    house = get_house_info(link)
+    # print(house, end='\r')
+    insert(db,house)
